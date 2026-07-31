@@ -1,4 +1,4 @@
-# Alto Motors — Inquiry Triage Prototype
+# Alto Motors — Inquiry Desk Prototype
 
 Round 2 task — Strategic Automation Associate, Legend Motors.
 
@@ -84,7 +84,7 @@ python app.py
 python -m uvicorn server:app --reload --port 8000
 ```
 Then open `http://localhost:8000` in your browser. The same endpoint
-(`POST /api/triage`, JSON in → JSON out) is what a WhatsApp Business API
+(`POST /api/Inquiry_Desk`, JSON in → JSON out) is what a WhatsApp Business API
 webhook would call in production — no redesign needed to connect it.
 
 ## Known limitations (by design, for a 1–2 day prototype)
