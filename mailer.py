@@ -1,14 +1,3 @@
-"""
-Email forwarding to internal department mailboxes, and test-drive booking
-confirmations to the customer.
-
-Only real credentials go in .env — mailbox addresses are not secrets, so
-they're set directly below. Swap in real addresses before use.
-
-.env required:
-    GMAIL_ADDRESS=sending_account@gmail.com
-    GMAIL_APP_PASSWORD=your16charapppassword
-"""
 
 import os
 import smtplib
@@ -18,15 +7,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Internal routing addresses — not secrets, safe to hardcode. Swap these for
-# Alto Motors' real department addresses.
 MAILBOX_FINANCE = "essainsham987@gmail.com"
 MAILBOX_GENERAL = "pes2pp2@gmail.com"
 
-# DEMO ONLY: this prototype has no conversation memory (no thread_id, no
-# customer-email collection mid-conversation), so a fixed stand-in address
-# is used for test-drive confirmations. In production, the customer's real
-# email would be collected and tracked per conversation instead.
 DEMO_CUSTOMER_EMAIL = "essa.21ai223@iceas.ac.in"
 
 

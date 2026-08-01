@@ -1,21 +1,3 @@
-"""
-LLM-as-judge — reviews a classification using a DIFFERENT model than the one
-that produced it (avoids self-verification bias: a model checking its own
-output tends to rationalize it rather than genuinely re-examine it).
-
-DURING the 1-2 week trust-building window, this runs on EVERY message, inline,
-as part of the live graph (imported into app.py as a node). Once the system
-has earned trust, this node is removed from the graph entirely — this file
-can stay as a reference / for future re-validation, but stops being called
-on live traffic.
-
-Exposes:
-    judge_classification(state) -> JudgeVerdict
-    log_agreement(state, verdict)   -> appends to dataset.jsonl
-
-Can still be run directly for a quick standalone batch check:
-    python judge.py
-"""
 
 import os
 import json
@@ -25,7 +7,6 @@ from langchain_groq import ChatGroq
 
 load_dotenv()
 
-# Deliberately a DIFFERENT model/lab from the classifier (llama-3.3-70b-versatile).
 JUDGE_MODEL = "openai/gpt-oss-120b"
 
 DATASET_PATH = "dataset.jsonl"
@@ -96,11 +77,7 @@ def log_agreement(state: dict, verdict: JudgeVerdict):
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-# ---------------------------------------------------------------------------
-# Optional standalone use: python judge.py
-# Runs the judge over app.py's TEST_MESSAGES as a quick batch sanity check,
-# separate from the live graph.
-# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
     from app import Inquiry_Desk, TEST_MESSAGES
 
