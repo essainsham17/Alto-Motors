@@ -21,10 +21,10 @@ GENERATIVE_CATEGORIES = ["Financing & EMI Query", "Trade-In Valuation"]
 
 class Classification(BaseModel):
     primary_category: Literal[
-        "Test Drive Booking", "Financing & EMI Query", "Trade-In Valuation", "Other"
+        "Test Drive Booking", "Financing & EMI Query", "Trade-In Valuation", "Other", "Greeting"
     ] = Field(description="The main intent of the customer's message.")
     secondary_category: Optional[
-        Literal["Test Drive Booking", "Financing & EMI Query", "Trade-In Valuation", "Other"]
+        Literal["Test Drive Booking", "Financing & EMI Query", "Trade-In Valuation", "Other", "Greeting"]
     ] = Field(default=None, description="A second intent, only if the message mixes two requests.")
     confidence: float = Field(ge=0.0, le=1.0)
     reasoning: str = Field(description="One short sentence explaining the primary_category choice.")
@@ -93,7 +93,7 @@ def get_available_slots():
 # ---------------------------------------------------------------------------
 
 def classify_node(state: GraphState) -> GraphState:
-    CLASSIFY_PROMPT = """You are a Inquiry_Desk assistant for Alto Motors, a car dealership \
+    CLASSIFY_PROMPT = """You are a Inquiry Desk assistant for Alto Motors, a car dealership \
 selling two brands: Karva (mass-market sedans and SUVs) and Renzo (premium sedans \
 and performance cars).
 
@@ -102,17 +102,22 @@ Classify the customer's inquiry into one of:
 - Financing & EMI Query
 - Trade-In Valuation
 - Other
+- Greeting
 
 Rules:
 1. MIXED INTENT: if the message contains two separate requests, set primary_category
 to the main one and secondary_category to the other.
-2. VAGUE MESSAGES: messages like "is this still available?" give no real signal.
-Use "Other" as the primary_category and score BELOW 0.5 confidence. Never return
-null for primary_category - always pick a category, and use "Other" when nothing fits.
-3. LANGUAGE: messages may be in English, Arabic, or a mix. Classify them the same
+2. VAGUE MESSAGES: messages like "is this still available?" give no real signal about
+WHICH car or service, but ARE a real business inquiry. Use "Other" and score BELOW 0.5.
+3. GREETINGS / CHITCHAT: messages like "hi", "thanks", "good morning" are not a business
+inquiry at all — nothing to classify, nothing unclear about them. Use "Greeting" with
+HIGH confidence (0.9+), not "Other". Do not confuse a friendly opener with a vague inquiry.
+4. Never return null for primary_category - always pick a category.
+5. LANGUAGE: messages may be in English, Arabic, or a mix. Classify them the same
 way regardless, and record which in detected_language.
-4. Be honest with confidence. A low score on an unclear message is the correct
-output, not a failure."""
+6. Be honest with confidence. A low score on a genuinely unclear inquiry is correct,
+not a failure — but greetings should score high, since there's nothing ambiguous
+about a hello."""
 
     result = structured_llm.invoke([
         {"role": "system", "content": CLASSIFY_PROMPT},
@@ -125,6 +130,23 @@ output, not a failure."""
         "reasoning": result.reasoning,
         "detected_language": result.detected_language,
     }
+
+
+def greeting_node(state: GraphState) -> GraphState:
+    """
+    Handles greetings/chitchat ("hi", "thanks", "good morning"). No judge,
+    no email, no dataset logging — there's no classification risk to review
+    and no one who needs to be notified about a hello.
+    """
+    GREETING_PROMPT = """You are replying on behalf of Alto Motors, a car dealership.
+The customer sent a greeting or casual message, not a business inquiry.
+Reply warmly in ONE short sentence, in the SAME language they used, and invite
+them to ask about test drives, financing, or trade-in valuation.
+
+Customer message: {inquiry}"""
+    reply = llm.invoke(GREETING_PROMPT.format(inquiry=state["inquiry"]))
+    return {"draft_reply": reply.content, "human_review": False,
+            "judge_agrees": None, "judge_reason": "Not reviewed — greeting/chitchat, no business content"}
 
 
 def judge_node(state: GraphState) -> GraphState:
@@ -205,6 +227,12 @@ def generative_category_node(state: GraphState) -> GraphState:
 # ROUTING FUNCTION
 # ---------------------------------------------------------------------------
 
+def route_after_classify(state: GraphState) -> str:
+    if state["primary_category"] == "Greeting":
+        return "greeting_node"
+    return "judge_node"
+
+
 def route(state: GraphState) -> str:
     if not state["judge_agrees"]:
         return "human_review_node"
@@ -224,14 +252,16 @@ def route(state: GraphState) -> str:
 workflow = StateGraph(GraphState)
 
 workflow.add_node("classify_node", classify_node)
+workflow.add_node("greeting_node", greeting_node)
 workflow.add_node("judge_node", judge_node)
 workflow.add_node("human_review_node", human_review_node)
 workflow.add_node("test_drive_node", test_drive_node)
 workflow.add_node("generative_category_node", generative_category_node)
 
 workflow.set_entry_point("classify_node")
-workflow.add_edge("classify_node", "judge_node")
+workflow.add_conditional_edges("classify_node", route_after_classify)
 workflow.add_conditional_edges("judge_node", route)
+workflow.add_edge("greeting_node", END)
 workflow.add_edge("human_review_node", END)
 workflow.add_edge("test_drive_node", END)
 workflow.add_edge("generative_category_node", END)
